@@ -1,0 +1,66 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-11  BLE 曲谱下发与录音回传
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    P1["手机网页"]
+    P2["BLE 115200"]
+
+    subgraph G1["接收"]
+        direction TB
+        U1["uart_rx"] --> U2["16 B 定长帧"]
+    end
+
+    subgraph G2["命令状态机"]
+        direction TB
+        S0["空闲"]
+        S1["装载"]
+        S2["就绪"]
+        S3["播放"]
+        S4["录音"]
+        S5["错误"]
+        S0 -->|开始| S1
+        S1 -->|校验通过| S2
+        S2 -->|播放| S3
+        S3 -->|曲终 / 停止| S2
+        S2 -->|录音| S4
+        S4 -->|停止| S2
+        S2 -->|出错| S5
+    end
+
+    subgraph G3["存储"]
+        direction TB
+        M1["事件 RAM 8192 × 64"]
+        M2["播放器"]
+        M3["曲谱 4 声部"]
+        M4["录音器"]
+        M2 --> M3
+        M4 --> M1
+    end
+
+    subgraph G4["发送"]
+        direction TB
+        T1["发送队列"] --> T2["uart_tx"]
+    end
+
+    O1["状态回包"]
+    O2["录音回传"]
+    O3["屏幕三行"]
+
+    P1 --> P2 --> G1 --> G2
+    G2 --> G3
+    M2 --> O1
+    G2 --> G4 --> P1
+    G2 --> O2
+    G2 --> O3
+
+    class P1,P2 n
+    class U1,U2,S0,S1,S2,S3,S4,S5,T1,T2 n
+    class M1,M2,M3,M4 k
+    class O1,O2,O3 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G4 fill:#ffffff,stroke:#9a9a9a,color:#333333

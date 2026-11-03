@@ -1,0 +1,164 @@
+//==============================================================
+// 阶段2 物理约束：10 音符键 + 八度 + 音频
+// 10 个音符键走 J13（SDRAM 扩展座，不插子板时悬空可作 GPIO）
+// 全部按键低电平有效，FPGA 内部上拉，按键另一端接 GND
+//==============================================================
+
+//====== SYS ======
+IO_LOC  "sys_clk"   V22;
+IO_PORT "sys_clk"   IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+// 阶段7：AA13(KEY0) 由"复位"改作**八度单键循环**（本设计从来不用复位，见 top.v）
+IO_LOC  "key_oct" AA13;
+IO_PORT "key_oct" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//====== ★★ 12 音符键 (J13) —— 2026-10-13 由 10 键改成"钢琴布局" ======
+// 【布局】一排 7 个**白键** + 一排 5 个**黑键**（正好对应引脚的"两行"）：
+//    键0..键6  = C4  D4  E4  F4  G4  A4  B4    ← 白键排
+//    键7..键11 = C#4 D#4 F#4 G#4 A#4           ← 黑键排
+// ⚠️ **键号不是音高顺序**（键7 是 C#4，音高上夹在键0 与键1 之间）——
+//    这是用户刻意排的，**不要"顺手理顺"**。逐键对照表见 `note_map.v` 头部。
+// ⚠️ 24 个脚**全部是 J13/SDRAM 公共脚** ⇒ **J13 上不能插 SDRAM 子板**。
+// ⚠️ 原清单里的 `B17`（= `sdram_clk` **全局时钟脚**，工程明文要避开）**已换成 `B20`** ✓
+IO_LOC  "Key_note[0]"  C18;   // 键0  C4   sdram_adr[3]
+IO_LOC  "Key_note[1]"  D20;   // 键1  D4   sdram_adr[10]
+IO_LOC  "Key_note[2]"  F16;   // 键2  E4   sdram_ras
+IO_LOC  "Key_note[3]"  F13;   // 键3  F4   sdram_dqm[1]
+IO_LOC  "Key_note[4]"  D14;   // 键4  G4   sdram_adr[6]
+IO_LOC  "Key_note[5]"  D17;   // 键5  A4   sdram_adr[11]
+IO_LOC  "Key_note[6]"  B20;   // 键6  B4   sdram_dq[10]
+IO_LOC  "Key_note[7]"  E19;   // 键7  C#4  sdram_adr[1]
+IO_LOC  "Key_note[8]"  F15;   // 键8  D#4  sdram_ba[0]
+IO_LOC  "Key_note[9]"  E16;   // 键9  F#4  sdram_adr[4]
+IO_LOC  "Key_note[10]" A18;   // 键10 G#4  sdram_adr[8]
+IO_LOC  "Key_note[11]" B21;   // 键11 A#4  sdram_dq[8]
+
+IO_PORT "Key_note[0]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[1]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[2]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[3]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[4]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[5]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[6]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[7]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[8]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[9]"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[10]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "Key_note[11]" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//====== ★★ 四只旋转编码器（2026-10-13 新增）======
+// 每只三根：A 相 / B 相 / SW。**全部走 J13 空闲脚、全是普通 IO**
+//   （不是全局时钟脚、不是 CPU/SSPI 双功能脚 —— 已逐脚对过官方引脚表）。
+//   ⚠️ `B17`（= `sdram_clk` **全局时钟脚**）**没用**，这是刻意的。
+// 用法：延迟/混响/合唱三只 —— SW 开关自己那个效果器、旋转调它那份档位；
+//       表情一只 —— SW 循环切维度、旋转调当前维度的档。详见 `fx.v` / `expr_ctrl.v`。
+//   ⭐ 接法与 EC11 完全一样：A/B/SW 三根直连 FPGA，公共端 C 接 GND，**免外接上拉**。
+//   ⚠️ 方向反了就把 A/B 两根对调（代码不用改，与 EC11 同）。
+IO_LOC  "dly_a" C19;   // 延迟   sdram_adr[2]
+IO_LOC  "dly_b" D19;   //        sdram_adr[0]
+IO_LOC  "dly_sw" C20;  //        sdram_ba[1]
+IO_LOC  "rev_a" F19;   // 混响   sdram_cs
+IO_LOC  "rev_b" E17;   //        sdram_cas
+IO_LOC  "rev_sw" F14;  //        sdram_dqm[0]
+IO_LOC  "cho_a" D16;   // 合唱   sdram_we
+IO_LOC  "cho_b" D15;   //        sdram_adr[5]
+IO_LOC  "cho_sw" A19;  //        sdram_adr[7]
+IO_LOC  "exp_a" C17;   // 表情   sdram_adr[9]
+IO_LOC  "exp_b" B18;   //        sdram_adr[12]
+IO_LOC  "exp_sw" A21;  //        sdram_dq[9]
+
+IO_PORT "dly_a"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "dly_b"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "dly_sw" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "rev_a"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "rev_b"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "rev_sw" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "cho_a"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "cho_b"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "cho_sw" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "exp_a"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "exp_b"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "exp_sw" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//====== 板载 KEY1 / KEY2（原表情/参数键，2026-10-28 恢复用于歌曲指引）======
+//   KEY1 = AB13：进入/退出 LED 指引模式
+//   KEY2 = Y12 ：菜单内选歌；OFF 时给“请先按 KEY1”提示
+IO_LOC  "key1" AB13;
+IO_PORT "key1" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC  "key2" Y12;
+IO_PORT "key2" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//====== EC11 旋转编码器（音量 + 音色键）======
+IO_LOC  "ec11_a"  A13;
+IO_LOC  "ec11_b"  C13;
+IO_LOC  "ec11_sw" C14;
+IO_PORT "ec11_a"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "ec11_b"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_PORT "ec11_sw" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//====== LED ======
+// 阶段7：把 8 个灯全用起来（原来只用 LEDs[0..3]）
+//   LEDs[0]   音色闪速（兼心跳）
+//   LEDs[3:1] 八度图案（不变）
+//   LEDs[5:4] 表情维度 00=关 01=滑音 10=颤音 11=震音
+//   LEDs[7:6] 参数档位 00~11 = 第 1~4 档
+//
+// ⚠️ LEDs[4..7] 是**双功能脚**（CPU/SSPI），必须在 Gowin 里打开
+//    「Use SSPI/CPU as regular IO」，否则这两个脚拿不到：
+//    `impl/*_process_config.json` 里 `"CPU": true, "SSPI": true`（`"MSPI"` 保持 false，
+//    启动路径不动）。**照官方例程 `TangMega-138K-example-main/pmod_led` 来** ——
+//    它用的就是这 8 个焊盘（它的 led[0..7] 与我们的 LEDs[7..0] 是同一组，编号方向相反）。
+//    引脚与 DRIVE=8 也照抄官方例程。
+IO_LOC  "LEDs[0]"   T18;
+IO_LOC  "LEDs[1]"   R18;
+IO_LOC  "LEDs[2]"   R17;
+IO_LOC  "LEDs[3]"   P16;
+IO_LOC  "LEDs[4]"   U21;
+IO_LOC  "LEDs[5]"   T21;
+IO_LOC  "LEDs[6]"   R19;
+IO_LOC  "LEDs[7]"   P19;
+
+IO_PORT "LEDs[0]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[1]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[2]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[3]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[4]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[5]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[6]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "LEDs[7]"   IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+//====== AUDIO（PT8211 + 功放）======
+IO_LOC  "HP_BCK"   Y17;
+IO_LOC  "HP_WS"    AB17;
+IO_LOC  "HP_DIN"   AA16;
+IO_LOC  "PA_EN"    AB16;
+
+IO_PORT "HP_BCK"   IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "HP_WS"    IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "HP_DIN"   IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+IO_PORT "PA_EN"    IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+
+//====== HDMI（D1 彩条；照抄官方 hdmi_colorbar/eda_proj/src/hdmi.cst）======
+// 只约束 p 端；n 端由差分对自动分配。
+IO_LOC  "tmds_d_p_0[0]" J14,H14;
+IO_PORT "tmds_d_p_0[0]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8;
+IO_LOC  "tmds_d_p_0[1]" J15,H15;
+IO_PORT "tmds_d_p_0[1]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8;
+IO_LOC  "tmds_d_p_0[2]" K17,J17;
+IO_PORT "tmds_d_p_0[2]" IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8;
+IO_LOC  "tmds_clk_p_0"  G15,G16;
+IO_PORT "tmds_clk_p_0"  IO_TYPE=LVCMOS33D PULL_MODE=NONE DRIVE=8;
+
+//====== 蓝牙串口 ATK-BLE02（2026-10-30）======
+//   ⚠️ 板载 USB-UART（官方网络名 txp/rxp = U15/V14）**已被板上串口芯片占用**，
+//      不能拿来接模块（两条线会互顶）。
+//   ⇒ 用 J13 上剩下的 SDRAM0_DQ 脚（前提同按键：**不插 SDRAM 子板**）：
+//        A14 = SDRAM0_DQ6  → ble_rx（FPGA 收） ← 模块 **TXD**
+//        B13 = SDRAM0_DQ4  → ble_tx（FPGA 发） → 模块 **RXD**
+//   ⚠️ 其余空闲脚：E13/E14/C15/A20/A15/A16/B15/B16
+//      （DQ3/DQ5/DQ7 = C14/C13/A13 已被 EC11 音量编码器占用）
+//   ⚠️ **B17（SDRAM0_CLK）是全局时钟脚，永远避开**。
+//   模块供电 3.3 V，共地。
+IO_LOC  "ble_rx"  A14;
+IO_PORT "ble_rx"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC  "ble_tx"  B13;
+IO_PORT "ble_tx"  IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;

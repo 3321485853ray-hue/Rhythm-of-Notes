@@ -1,0 +1,56 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-3  按键与编码器输入流程
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    R1["12 键<br/>低有效"]
+    R2["5 × EC11"]
+    R3["KEY0–2"]
+
+    subgraph G1["按键"]
+        direction TB
+        D1["消抖 3 ms"]
+        K1["key_scan<br/>press / release"]
+        D1 --> K1
+    end
+
+    subgraph G2["编码器"]
+        direction TB
+        E1["正交解码"]
+        E2["4 脉冲 = 1 档"]
+        E3["短按 / 长按"]
+        E1 --> E2 --> E3
+    end
+
+    subgraph G3["功能"]
+        direction TB
+        O1["八度 0 / ±1"]
+        T1["4 音色"]
+        V1["音量 Q15"]
+    end
+
+    OUT1["octave[2:0]"]
+    OUT2["timbre[2:0]"]
+    OUT3["volume Q15"]
+    OUT4["按键脉冲"]
+    OUT5["效果档位"]
+    OUT6["KEY1/2 → 指引"]
+
+    R1 --> D1
+    R2 --> E1
+    E2 --> V1
+    R3 --> O1
+    R3 --> OUT6
+    O1 --> OUT1
+    T1 --> OUT2
+    V1 --> OUT3
+    K1 --> OUT4
+    E2 --> OUT5
+
+    class R1,R2,R3,D1,K1,E1,E2,E3,O1,T1,V1 n
+    class OUT1,OUT2,OUT3,OUT4,OUT5,OUT6 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333

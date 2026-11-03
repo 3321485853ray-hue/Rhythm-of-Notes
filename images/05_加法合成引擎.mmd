@@ -1,0 +1,44 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-5  32 谐波加法合成引擎
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["phase_step"]
+    I2["包络"]
+    I3["音色"]
+    I4["48.8 kHz 节拍"]
+
+    subgraph G1["32 时隙轮转"]
+        direction TB
+        H1["时隙 0–31"]
+        H2["相位累加<br/>h × step"]
+        H3["查正弦表"]
+        H4["取谐波系数"]
+        H5["乘加累加"]
+        H1 --> H2 --> H3 --> H4 --> H5
+        H5 -->|未满 32| H1
+    end
+
+    N1["归一化"]
+    C1["限幅"]
+    B1["加直流偏置"]
+    O1["波形 → 包络 → 混音"]
+
+    I1 --> H2
+    I3 --> H4
+    I4 --> H1
+    G1 --> N1 --> C1 --> B1 --> O1
+    I2 --> O1
+
+    R1["正弦表 1024 × 16"]
+    R2["系数表 4 × 32"]
+    H3 -.-> R1
+    H4 -.-> R2
+
+    class I1,I2,I3,I4 n
+    class H1,H2,H3,H4,H5,N1,C1,B1 n
+    class R1,R2 n
+    class O1 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333

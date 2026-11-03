@@ -1,0 +1,97 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW5AST-138C" pn="GW5AST-LV138PG484AC1/I0">gw5ast138c-007</Device>
+    <FileList>
+        <File path="src/top.v" type="file.verilog" enable="1"/>
+        <!-- D2a: 显示（display_top 由 top 例化；显示抽头全部只读） -->
+        <File path="src/display_cond.v" type="file.verilog" enable="1"/>
+        <File path="src/display_gain.v" type="file.verilog" enable="1"/>
+        <File path="src/display_scope.v" type="file.verilog" enable="1"/>
+        <File path="src/display_lissa.v" type="file.verilog" enable="1"/>
+        <File path="src/display_keysnap.v" type="file.verilog" enable="1"/>
+        <!-- D2b 文字层：静态标签 + 8x16 字库 + 动态数值 + 21 ms 参数快照 -->
+        <File path="src/label_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/font_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/text_dyn.v" type="file.verilog" enable="1"/>
+        <!-- v37：音量百分比拆位（50 MHz 域）—— 防止 vol_pct 高扇出被提升成 LW -->
+        <File path="src/vol_bcd.v" type="file.verilog" enable="1"/>
+        <!-- 2026-10-30 v36：display_stat 上板输出恒 0（真因未查明），已从文字链路移除
+             （top.v 改成直接送实时信号 + display_top 帧起始锁存）。
+             ⚠️ 不能留在 FileList 里 —— 未例化的模块会被综合当成顶层，
+             见 memory gowin-orphan-module-becomes-top
+        <File path="src/display_stat.v" type="file.verilog" enable="1"/>
+        -->
+        <File path="src/guide.v" type="file.verilog" enable="1"/>
+        <File path="src/guide_fall.v" type="file.verilog" enable="1"/>
+        <File path="src/guide_score_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/guide_text.v" type="file.verilog" enable="1"/>
+        <File path="src/display_top.v" type="file.verilog" enable="1"/>
+        <!-- 蓝牙曲谱下发（ATK-BLE02）：UART 字节流 → 16 B 定长帧 → 状态回包 -->
+        <File path="src/crc16_calc.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_rx.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/frame_parser.v" type="file.verilog" enable="1"/>
+        <File path="src/cmd_exec.v" type="file.verilog" enable="1"/>
+        <File path="src/frame_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/crc32_12.v" type="file.verilog" enable="1"/>
+        <File path="src/keymap.v" type="file.verilog" enable="1"/>
+        <File path="src/recorder.v" type="file.verilog" enable="1"/>
+        <File path="src/ble_line.v" type="file.verilog" enable="1"/>
+        <File path="src/bcd_fsm.v" type="file.verilog" enable="1"/>
+        <File path="src/ble_text.v" type="file.verilog" enable="1"/>
+        <File path="src/crc32_block.v" type="file.verilog" enable="1"/>
+        <File path="src/event_ram.v" type="file.verilog" enable="1"/>
+        <File path="src/song_player.v" type="file.verilog" enable="1"/>
+        <File path="src/score_alloc.v" type="file.verilog" enable="1"/>
+        <File path="src/strobe1024.v" type="file.verilog" enable="1"/>
+        <!-- 1024 点实时频谱（音频 50 MHz 域）+ 三张生成表 -->
+        <File path="src/spectrum_fft.v" type="file.verilog" enable="1"/>
+        <File path="src/spec_bank_ram.v" type="file.verilog" enable="1"/>
+        <File path="src/hann_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/twiddle_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/bin2bar_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/video_timing_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_pll.v" type="file.verilog" enable="1"/>
+        <!-- ⚠️ 2026-10-26 `pll_init.v` 已删除：它属于 v20e9 的 PLL 动态校准实验
+             （该版上板黑屏）。720p60 用合法 VCO 750 + 静态分频，不需要校准。 -->
+        <File path="src/dvi_tx_tmds_enc.v" type="file.verilog" enable="1"/>
+        <File path="src/dvi_tx_tmds_phy.v" type="file.verilog" enable="1"/>
+        <File path="src/dvi_tx_clk_drv.v" type="file.verilog" enable="1"/>
+        <File path="src/i2s_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/note_freq.v" type="file.verilog" enable="1"/>
+        <File path="src/key_debounce.v" type="file.verilog" enable="1"/>
+        <File path="src/key_scan.v" type="file.verilog" enable="1"/>
+        <File path="src/note_map.v" type="file.verilog" enable="1"/>
+        <File path="src/octave_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/voice.v" type="file.verilog" enable="1"/>
+        <File path="src/mixer.v" type="file.verilog" enable="1"/>
+        <File path="src/voice_manager.v" type="file.verilog" enable="1"/>
+        <File path="src/timbre_gen.v" type="file.verilog" enable="1"/>
+        <File path="src/additive_engine.v" type="file.verilog" enable="1"/>
+        <File path="src/sine_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/timbre_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/rotary_encoder.v" type="file.verilog" enable="1"/>
+        <File path="src/volume_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/expr_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="src/vibrato.v" type="file.verilog" enable="1"/>
+        <File path="src/tremolo.v" type="file.verilog" enable="1"/>
+        <File path="src/btn_shortlong.v" type="file.verilog" enable="1"/>
+        <!-- ⚠️ 2026-10-13 `fx_ctrl.v` **从这里删掉** —— 它已退役（三个效果器各有自己的
+             编码器开关）。留在列表里又没人例化的话，高云**可能把它当成顶层**、
+             静默替换掉整个设计（见工程记忆 gowin-orphan-module-becomes-top）。 -->
+        <File path="src/enc_gear.v" type="file.verilog" enable="1"/>
+        <File path="src/glide_tick_gen.v" type="file.verilog" enable="1"/>
+        <File path="src/delay_line.v" type="file.verilog" enable="1"/>
+        <File path="src/delay_line_frac.v" type="file.verilog" enable="1"/>
+        <File path="src/fx.v" type="file.verilog" enable="1"/>
+        <File path="src/comb_norm.v" type="file.verilog" enable="1"/>
+        <File path="src/allpass.v" type="file.verilog" enable="1"/>
+        <File path="src/reverb.v" type="file.verilog" enable="1"/>
+        <File path="src/chorus.v" type="file.verilog" enable="1"/>
+        <File path="src/top.cst" type="file.cst" enable="1"/>
+        <File path="src/top.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>

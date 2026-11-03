@@ -1,0 +1,65 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-9  HDMI 显示链
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    subgraph A["音频域 50 MHz"]
+        direction TB
+        A1["去直流 · 增益"]
+        A2["示波器 512 点"]
+        A3["李萨如"]
+        A4["键状态快照"]
+        A5["2048 点 FFT"]
+        A1 --> A2
+        A1 --> A3
+        A1 --> A5
+    end
+
+    subgraph C["跨时钟"]
+        direction TB
+        C1["翻转 + 3 级同步"]
+        C2["双时钟 BSRAM"]
+    end
+
+    subgraph P["像素域 75 MHz"]
+        direction TB
+        P0["PLL 75 / 375 MHz"]
+        P1["1280×720 时序"]
+        P2["波形 + 余辉"]
+        P3["李萨如 256×256"]
+        P4["频谱 128 柱"]
+        P5["键盘高亮"]
+        P6["文字层"]
+        P7["图层合成"]
+        P0 --> P1 --> P7
+        P2 --> P7
+        P3 --> P7
+        P4 --> P7
+        P5 --> P7
+        P6 --> P7
+    end
+
+    O1["TMDS 编码"]
+    O2["并串输出"]
+    O3["显示器"]
+
+    A1 --> C1
+    A2 --> C1
+    A3 --> C1
+    A4 --> C1
+    A5 --> C2
+    C1 --> P2
+    C1 --> P3
+    C1 --> P5
+    C2 --> P4
+    P7 --> O1 --> O2 --> O3
+
+    class A1,A2,A3,A4,A5 n
+    class C1,C2 n
+    class P0,P1,P2,P3,P4,P5,P6,P7 k
+    class O1,O2,O3 n
+
+    style A fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style C fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style P fill:#ffffff,stroke:#9a9a9a,color:#333333

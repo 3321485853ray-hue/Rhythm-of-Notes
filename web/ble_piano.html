@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>BLE 电子琴 · 曲谱下发</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 16px;
+         background: #14161a; color: #e8e8ea; }
+  h1 { font-size: 18px; margin: 0 0 12px; font-weight: 600; }
+  .card { background: #1d2027; border: 1px solid #2b2f38; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; font-weight: 600; color: #9fd3ff; }
+  button { background: #2f6fed; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px;
+           font-size: 15px; margin: 4px 6px 4px 0; }
+  button:disabled { background: #3a3f4a; color: #8a8f99; }
+  button.alt { background: #39404d; }
+  input[type=file] { color: #cfd3da; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .row span { width: 52px; color: #a7adb8; font-size: 13px; }
+  select { background: #262b34; color: #e8e8ea; border: 1px solid #363c47; border-radius: 6px; padding: 5px; }
+  #log { background: #0f1115; border: 1px solid #262b34; border-radius: 8px; padding: 8px;
+         height: 180px; overflow: auto; font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+         white-space: pre-wrap; }
+  .ok { color: #6ee7a8; } .err { color: #ff8080; } .dim { color: #8a8f99; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+</style>
+
+<h1>BLE 电子琴 · 安卓 Chrome 专用</h1>
+
+<div class="card">
+  <h2>① 连接</h2>
+  <button id="btnConn">连接 BLE-PIANO-01</button>
+  <button id="btnPing" class="alt" disabled>PING（链路自检）</button>
+  <div id="connState" class="dim" style="margin-top:6px;font-size:13px">未连接</div>
+</div>
+
+<div class="card">
+  <h2>② 传曲谱</h2>
+  <div class="row"><input type="file" id="spsFile" accept=".sps,.bin"></div>
+  <div class="row"><span>循环</span>
+    <select id="loopSel">
+      <option value="0">一次</option><option value="1">2 次</option>
+      <option value="2">3 次</option><option value="255">无限</option>
+    </select>
+  </div>
+  <button id="btnSend" disabled>下载并播放</button>
+  <button id="btnStop" class="alt" disabled>停止</button>
+  <button id="btnDemo" class="alt" disabled style="margin-top:8px">内置示例：小星星（不用选文件）</button>
+  <div id="prog" class="dim" style="font-size:13px;margin-top:6px"></div>
+</div>
+
+<div class="card">
+  <h2>③ 自定义键位</h2>
+  <div class="grid" id="kmGrid"></div>
+  <button id="btnKeymap" disabled style="margin-top:10px">下发键位表</button>
+  <button id="btnKeymapDef" class="alt" disabled>恢复默认</button>
+</div>
+
+<div class="card">
+  <h2>④ 录音回传</h2>
+  <button id="btnRecStart" disabled>开始录制</button>
+  <button id="btnRecStop" class="alt" disabled>停止并传回</button>
+  <div id="recState" class="dim" style="font-size:13px;margin-top:6px"></div>
+</div>
+
+<div class="card">
+  <h2>日志</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+//==============================================================
+// 协议常量（PROTOCOL.md v1.0 + 本工程扩展）
+//==============================================================
+const SERVICE_UUID  = '9ecadc24-0ee5-a9e0-93f3-a3b50100406e';
+const UUID_WRITE    = '9ecadc24-0ee5-a9e0-93f3-a3b50200406e';  // 手机 → 模块
+const UUID_NOTIFY   = '9ecadc24-0ee5-a9e0-93f3-a3b50300406e';  // 模块 → 手机
+
+const CMD = { PING:0x01, BEGIN:0x02, EVENT:0x10, END:0x03, PLAY:0x04, STOP:0x05,
+              GET_STATUS:0x0A, KEYMAP:0x20, KEYMAP_DONE:0x21,
+              REC_BEGIN:0x40, REC_STOP:0x41, REC_READ:0x42,
+              STATUS:0x80, RECDATA:0x81 };
+
+const DEFAULT_KEYMAP = [60,62,64,65,67,69,71,61,63,66,68,70];
+const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+//==============================================================
+// CRC
+//==============================================================
+function crc16(data) {
+  let c = 0xFFFF;
+  for (const b of data) {
+    c ^= b << 8;
+    for (let i = 0; i < 8; i++) c = (c & 0x8000) ? (((c << 1) ^ 0x1021) & 0xFFFF) : ((c << 1) & 0xFFFF);
+  }
+  return c;
+}
+let CRC32_TABLE = null;
+function crc32Table() {
+  if (CRC32_TABLE) return CRC32_TABLE;
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  CRC32_TABLE = t;
+  return t;
+}
+function crc32(data) {
+  const t = crc32Table();
+  let c = 0xFFFFFFFF;
+  for (const b of data) c = t[(c ^ b) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function u16le(v) { return [v & 0xFF, (v >> 8) & 0xFF]; }
+function u32le(v) { return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+
+function buildFrame(cmd, seq, payload) {
+  const p = payload || [];
+  const f = new Uint8Array(16);
+  f[0] = 0xAA; f[1] = 0x5A; f[2] = 0x01; f[3] = cmd; f[4] = seq & 0xFF; f[5] = p.length;
+  for (let i = 0; i < 8; i++) f[6 + i] = i < p.length ? p[i] : 0;
+  const c = crc16(f.subarray(2, 14));
+  f[14] = c & 0xFF; f[15] = (c >> 8) & 0xFF;
+  return f;
+}
+
+//==============================================================
+// 状态
+//==============================================================
+let device = null, server = null, chWrite = null, chNotify = null;
+let seq = 0;
+let rxBuf = [];
+let recEvents = [];
+let recTempoMs = 1;
+let recording = false;
+// ★ 录音回传的分块控制（见 btnRecStop 上方注释）
+let recStopResolve = null;      // REC_STOP 的回包 arg = 录到的事件数
+// 一次 REC_READ 的上下文：
+//   chunkBuf 收本块事件；chunkPhase 跟着 0x13(REC_START) → 0x14(REC_END) 走；
+//   chunkDone 是本次请求的收尾回调（到齐 / 超时 / 被 FPGA 拒绝 都走它）。
+let chunkBuf     = null;
+let chunkPhase   = 0;           // 0=空闲 1=已发请求、等 REC_START 2=等 REC_END
+let chunkWanted  = 0;
+let chunkDone    = null;
+
+const $ = id => document.getElementById(id);
+function log(msg, cls) {
+  const el = $('log');
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+function setConnected(on) {
+  $('btnPing').disabled = !on;
+  $('btnSend').disabled = !on;
+  $('btnStop').disabled = !on;
+  $('btnDemo').disabled = !on;
+  $('btnKeymap').disabled = !on;
+  $('btnKeymapDef').disabled = !on;
+  $('btnRecStart').disabled = !on;
+  $('btnRecStop').disabled = !on;
+  $('btnConn').textContent = on ? '断开重连' : '连接 BLE-PIANO-01';
+}
+
+//==============================================================
+// 连接
+//==============================================================
+async function connect() {
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'BLE-PIANO' }, { namePrefix: 'ATK-BLE02' }],
+      optionalServices: [SERVICE_UUID],
+    });
+    device.addEventListener('gattserverdisconnected', () => {
+      log('连接断开', 'err'); setConnected(false); $('connState').textContent = '已断开';
+    });
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+
+    // 按**属性**找特征，不硬编码方向（手册里 TX/RX 的命名容易看反）
+    const chars = await svc.getCharacteristics();
+    chWrite = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+    chNotify = chars.find(c => c.properties.notify || c.properties.indicate);
+    if (!chWrite || !chNotify) throw new Error('没找到写/通知特征');
+
+    await chNotify.startNotifications();
+    chNotify.addEventListener('characteristicvaluechanged', ev => onNotify(ev.target.value));
+    // 先把通知开起来（模块要求）
+
+    log('已连接：' + (device.name || 'BLE') , 'ok');
+    log('  写特征 ' + chWrite.uuid + '\n  通知特征 ' + chNotify.uuid, 'dim');
+    $('connState').textContent = '已连接';
+    setConnected(true);
+  } catch (e) {
+    log('连接失败：' + e.message, 'err');
+  }
+}
+
+//==============================================================
+// 收帧（滑动窗口 + CRC16）
+//==============================================================
+function onNotify(dv) {
+  for (let i = 0; i < dv.byteLength; i++) rxBuf.push(dv.getUint8(i));
+  while (true) {
+    let idx = -1;
+    for (let i = 0; i + 1 < rxBuf.length; i++) {
+      if (rxBuf[i] === 0xAA && rxBuf[i + 1] === 0x5A) { idx = i; break; }
+    }
+    if (idx < 0) { if (rxBuf.length > 1) rxBuf = rxBuf.slice(-1); return; }
+    if (idx > 0) rxBuf = rxBuf.slice(idx);
+    if (rxBuf.length < 16) return;
+    const fr = rxBuf.slice(0, 16);
+    const crcIn = fr[14] | (fr[15] << 8);
+    if (crc16(fr.slice(2, 14)) !== crcIn) { rxBuf = rxBuf.slice(1); continue; }
+    rxBuf = rxBuf.slice(16);
+    handleFrame(fr);
+  }
+}
+
+const ST = {0:'OK',1:'ERR_FRAME_CRC',2:'ERR_LEN',3:'ERR_CMD',4:'ERR_STATE',5:'ERR_OVERFLOW',
+            6:'ERR_STREAM_CRC',7:'ERR_COUNT',0x10:'PLAY_STARTED',0x11:'PLAY_DONE',0x12:'STOPPED',
+            0x13:'REC_START',0x14:'REC_END'};
+
+function handleFrame(fr) {
+  const cmd = fr[3], len = fr[5], pay = fr.slice(6, 6 + len);
+  if (cmd === CMD.STATUS) {
+    const code = pay[0], arg = pay[1] | (pay[2] << 8), echo = pay[3];
+    // 回传期间每块都有 0x13/0x14，全打出来会把日志刷满 ⇒ 只在"不在块里"时打印
+    const quiet = (chunkPhase !== 0) && (code === 0x13 || code === 0x14);
+    if (!quiet) log('← ' + (ST[code] || ('0x' + code.toString(16))) + ' arg=' + arg, code === 0 ? 'ok' : 'err');
+    // ★ 2026-11-01 录音回传：一块的状态按 0x13(REC_START) → N×0x81 → 0x14(REC_END) 走。
+    //   必须"先见到 START 再认 END"：否则上一块迟到的 END 会把这一块的等待**提前**结束，
+    //   本块后面的数据就被算到下一块头上（条数错位 ⇒ 看上去"少几个音"）。
+    if (code === 0x13 && chunkPhase === 1) {
+      chunkPhase = 2;
+    } else if (code === 0x14 && chunkPhase === 2 && chunkDone) {
+      chunkDone(true);
+    } else if (code === 0x04 && chunkPhase !== 0 && chunkDone) {
+      chunkDone(false);          // ERR_STATE：FPGA 还在发上一块 ⇒ 这次请求被丢了，立刻重试
+    }
+    if (code === 0x00 && recStopResolve) { const r = recStopResolve; recStopResolve = null; r(arg); }
+  } else if (cmd === CMD.RECDATA) {
+    const delta = pay[0] | (pay[1] << 8), note = pay[2], vel = pay[3];
+    const dur = pay[4] | (pay[5] << 8);
+    // 只收"本块"的数据：必须已经见过本块的 REC_START（chunkPhase=2），
+    // 且不超过本块条数 ⇒ 上一块超时后的残包不会混进来（混进来就是错位/重复音）。
+    if (chunkBuf) {
+      if (chunkPhase === 2 && chunkBuf.length < chunkWanted) chunkBuf.push({ delta, note, vel, dur });
+    } else {
+      $('recState').textContent = '已收 ' + recEvents.length + ' 条事件';   // 录制中
+    }
+  }
+}
+
+//==============================================================
+// 发送（串行：等上一次写完再发下一帧）
+//==============================================================
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function writeFrame(f) {
+  if (chWrite.properties.write) await chWrite.writeValue(f);
+  else await chWrite.writeValueWithoutResponse(f);
+  await sleep(5);      // 给模块留缓冲（协议建议 ≥5 ms）
+}
+
+function nextSeq() { const s = seq; seq = (seq + 1) & 0xFF; return s; }
+
+async function ping() {
+  await writeFrame(buildFrame(CMD.PING, nextSeq(), []));
+  log('→ PING');
+}
+
+//==============================================================
+// 曲谱
+//==============================================================
+function parseSps(buf) {
+  // ⚠️ 2026-10-31 修：原来写 `buf[0]`..`buf[3]`，但 buf 是 **ArrayBuffer**，
+  //    它不能下标访问 ⇒ 全是 undefined ⇒ 不管选什么文件都报"不是 .sps 文件"。
+  //    （之前把锅甩给了微信转码，其实文件一直是好的。）ArrayBuffer 必须经视图读。
+  const dv = new DataView(buf);
+  if (buf.byteLength < 16) throw new Error('文件太短（' + buf.byteLength + ' B，至少要 16 B）');
+  const tag = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
+  if (tag !== 'SPS1') throw new Error('不是 .sps 文件（文件头="' + tag + '"，应为 SPS1）');
+  const total = dv.getUint16(6, true), tick = dv.getUint16(8, true);
+  const crc = dv.getUint32(12, true);
+  const body = new Uint8Array(buf, 16);
+  if (body.length !== total * 8) throw new Error('长度不符');
+  if (crc32(body) !== crc) throw new Error('文件 CRC32 不符');
+  return { total, tick, body };
+}
+
+// 内置示例曲：tools/out/twinkle.sps 原样（352 B，42 条事件，小星星，base64）
+// 为什么要内置：手机上从微信/文件管理器选 .sps 经常被改名或转码，
+// 选出来的东西头 4 字节不是 'SPS1' ⇒ 页面报"不是 .sps 文件"。这条通路不经过文件系统。
+const DEMO_SPS_B64 =
+  'U1BTMQEAKgABAAAAesmQdgAAPGSQAQAA9AE8ZJABAAD0AUNkkAEAAPQBQ2SQAQAA9AFFZJABAAD0AUVkkAEAAPQBQ2SQAQAA6ANBZJABAAD0AUFkkAEAAPQBQGSQAQAA9AFAZJABAAD0AT5kkAEAAPQBPmSQAQAA9AE8ZJABAADoA0NkkAEAAPQBQ2SQAQAA9AFBZJABAAD0AUFkkAEAAPQBQGSQAQAA9AFAZJABAAD0AT5kkAEAAOgDQ2SQAQAA9AFDZJABAAD0AUFkkAEAAPQBQWSQAQAA9AFAZJABAAD0AUBkkAEAAPQBPmSQAQAA6AM8ZJABAAD0ATxkkAEAAPQBQ2SQAQAA9AFDZJABAAD0AUVkkAEAAPQBRWSQAQAA9AFDZJABAADoA0FkkAEAAPQBQWSQAQAA9AFAZJABAAD0AUBkkAEAAPQBPmSQAQAA9AE+ZJABAAD0ATxkkAEAAA==';
+
+function b64ToBuffer(b64) {
+  const s = atob(b64), u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return u.buffer;
+}
+
+// buf：ArrayBuffer（parseSps 里 new Uint8Array(buf, 16) 要求是 ArrayBuffer）
+async function sendSps(buf, loop, onProg) {
+  const sps = parseSps(buf);
+  const body = sps.body, n = sps.total;
+
+  await writeFrame(buildFrame(CMD.BEGIN, nextSeq(), [...u16le(n), ...u32le(crc32(body)), ...u16le(sps.tick)]));
+  for (let i = 0; i < n; i++) {
+    await writeFrame(buildFrame(CMD.EVENT, nextSeq(), Array.from(body.subarray(i * 8, i * 8 + 8))));
+    if (onProg && (i % 20 === 0 || i === n - 1)) onProg(i + 1, n);
+  }
+  await writeFrame(buildFrame(CMD.END, nextSeq(), [...u16le(n), ...u32le(crc32(body))]));
+  await writeFrame(buildFrame(CMD.PLAY, nextSeq(), [loop & 0xFF]));
+  return n;
+}
+
+//==============================================================
+// 键位表
+//==============================================================
+function buildKeymapGrid() {
+  const grid = $('kmGrid');
+  grid.innerHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const wrap = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'dim';
+    label.style.fontSize = '12px';
+    label.textContent = '键 ' + i;
+    const sel = document.createElement('select');
+    sel.id = 'km' + i;
+    for (let m = 36; m <= 96; m++) {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = KEY_NAMES[m % 12] + (Math.floor(m / 12) - 1);
+      if (m === DEFAULT_KEYMAP[i]) o.selected = true;
+      sel.appendChild(o);
+    }
+    wrap.appendChild(label); wrap.appendChild(sel);
+    grid.appendChild(wrap);
+  }
+}
+
+async function sendKeymap(codes) {
+  for (let off = 0; off < 12; off += 6) {
+    const part = codes.slice(off, off + 6);
+    await writeFrame(buildFrame(CMD.KEYMAP, nextSeq(), [off, part.length, ...part]));
+  }
+  await writeFrame(buildFrame(CMD.KEYMAP_DONE, nextSeq(), u32le(crc32(codes))));
+  log('→ 键位表 ' + codes.join(',') + '（CRC32 ' + crc32(codes).toString(16) + '）');
+}
+
+//==============================================================
+// 录音 → MIDI
+//==============================================================
+const TICKS_PER_QUARTER = 500;   // 配合 tempo 500000 µs/quarter ⇒ 1 tick = 1 ms
+
+function varint(v) {
+  const out = [];
+  let x = v;
+  out.push(x & 0x7F);
+  x >>>= 7;
+  while (x > 0) { out.push((x & 0x7F) | 0x80); x >>>= 7; }
+  return out.reverse();
+}
+
+function buildMidi(events) {
+  // 事件 → 绝对时刻（ms）
+  // ⚠️ dur=0 的是"按下后一直没松手、按到 REC_STOP 为止"的音：FPGA 只在**松手**时
+  //    回写 dur（见 recorder.v 的 pend/rpend 回补），所以这些音在 RAM 里 dur 还是占位 0。
+  //    原来写 `e.dur || 1` ⇒ 只有 1 ms ⇒ 导进 MIDI 后**听不见**（用户报的"缺音"之一）。
+  //    给一个 250 ms 的可听默认长度。
+  let t = 0;
+  const abs = events.map(e => { t += e.delta; return { t, n: e.note, v: e.vel || 100, d: e.dur > 0 ? e.dur : 250 }; });
+  const raw = [];
+  raw.push({ t: 0, rank: 0, bytes: [0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20] });  // tempo 500000 µs
+  raw.push({ t: 0, rank: 1, bytes: [0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08] }); // 4/4
+  for (const e of abs) {
+    raw.push({ t: e.t, rank: 2, bytes: [0x90, e.n, Math.min(127, Math.max(1, e.v))] });
+    raw.push({ t: e.t + e.d, rank: 1, bytes: [0x80, e.n, 0] });
+  }
+  raw.sort((a, b) => (a.t - b.t) || (a.rank - b.rank));
+  const track = [];
+  let last = 0;
+  for (const r of raw) {
+    for (const b of varint(r.t - last)) track.push(b);
+    for (const b of r.bytes) track.push(b);
+    last = r.t;
+  }
+  for (const b of varint(0)) track.push(b);
+  track.push(0xFF, 0x2F, 0x00);
+
+  const hdr = [0x4D, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, (TICKS_PER_QUARTER >> 8) & 0xFF, TICKS_PER_QUARTER & 0xFF];
+  const trkHead = [0x4D, 0x54, 0x72, 0x6B,
+                   (track.length >>> 24) & 0xFF, (track.length >>> 16) & 0xFF,
+                   (track.length >>> 8) & 0xFF, track.length & 0xFF];
+  return new Uint8Array([...hdr, ...trkHead, ...track]);
+}
+
+function download(name, bytes) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'audio/midi' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+//==============================================================
+// 事件绑定
+//==============================================================
+$('btnConn').onclick = connect;
+$('btnPing').onclick = ping;
+
+$('btnSend').onclick = async () => {
+  const f = $('spsFile').files[0];
+  if (!f) { log('先选一个 .sps 文件', 'err'); return; }
+  try {
+    $('btnSend').disabled = true;
+    const n = await sendSps(await f.arrayBuffer(), parseInt($('loopSel').value, 10), (i, t) => {
+      $('prog').textContent = '已发 ' + i + '/' + t + ' 条';
+    });
+    log('曲谱已发完：' + n + ' 条事件', 'ok');
+    $('prog').textContent = '发送完成，等待演奏结束';
+  } catch (e) {
+    log('发送失败：' + e.message, 'err');
+  } finally { $('btnSend').disabled = false; }
+};
+
+$('btnDemo').onclick = async () => {
+  try {
+    $('btnDemo').disabled = true;
+    const n = await sendSps(b64ToBuffer(DEMO_SPS_B64), parseInt($('loopSel').value, 10),
+                            (i, t) => { $('prog').textContent = '已发 ' + i + '/' + t + ' 条'; });
+    log('曲谱已发完：' + n + ' 条事件（内置小星星）', 'ok');
+    $('prog').textContent = '发送完成，等待演奏结束';
+  } catch (e) {
+    log('发送失败：' + e.message, 'err');
+  } finally { $('btnDemo').disabled = false; }
+};
+
+$('btnStop').onclick = async () => {
+  await writeFrame(buildFrame(CMD.STOP, nextSeq(), []));
+  log('→ STOP');
+};
+
+$('btnKeymap').onclick = async () => {
+  const codes = [];
+  for (let i = 0; i < 12; i++) codes.push(parseInt($('km' + i).value, 10));
+  await sendKeymap(codes);
+};
+
+$('btnKeymapDef').onclick = async () => {
+  for (let i = 0; i < 12; i++) $('km' + i).value = DEFAULT_KEYMAP[i];
+  await sendKeymap(DEFAULT_KEYMAP);
+};
+
+$('btnRecStart').onclick = async () => {
+  recEvents = [];
+  recording = true;
+  $('recState').textContent = '录制中…（再点"停止并传回"）';
+  // REC_BEGIN：tick_ms = 1
+  await writeFrame(buildFrame(CMD.REC_BEGIN, nextSeq(), u16le(1)));
+};
+
+//=================================================================
+// ★★ 2026-11-01 录音回传：**分块 + 等 0x14 再要下一块 + 丢块自动重发**
+//
+//   历史：① 一次性 REC_READ(0, 8192) + 200 ms 定时器 → 模块缓冲溢出、尾部全丢；
+//        ② 改成 16 条一块、等到 0x14 再要下一块 → 还是"少几个音"——
+//           因为**块丢了没人补**，而且超时是 5 s，丢一块就要干等 5 s。
+//   现在：
+//     0) ★ **每次多要一条**：FPGA 的 frame_tx 队列（4 深）被 RECDATA 灌满后，
+//        紧跟的 0x14 会把 f3 覆盖 ⇒ 每块**最后一条丢**。多要一条正好把这条垫掉。
+//        （根因修在固件里的版本会让 HDMI 全黑，已回退，只能网页端绕。）
+//     1) 每块 **8 条**（128 B），块之间留 40 ms 让模块把上一块吐完；
+//     2) 本块没到齐（条数少了 / 1.2 s 超时 / FPGA 回 ERR_STATE 说还在发上一块）
+//        就**重发同一块**，最多 3 次。REC_STOP 之后 FPGA 的事件 RAM 不再变化，
+//        重发是幂等的；
+//     3) 每块先收进 chunkBuf，**条数对上才并入 recEvents** ⇒ 重发不会出重复音；
+//     4) **块大小自适应**：某块重发 3 次仍不完整 ⇒ 块减半（8→4→2→1）从同一位置重来；
+//        连续 4 块干净 ⇒ 再翻倍。BLE 模块缓冲能扛多大的突发，页面自己试出来。
+//        （块内丢帧时收到的那几条**不能要**：中间缺一条，后面的时间轴就整体错位。）
+//     5) 日志里会打出"第 X 块第 N 次只收到 a/b 条"，缺了几条一目了然。
+//=================================================================
+const REC_CHUNK          = 8;      // 每块条数上限（16 → 8：模块缓冲压力减半）
+const REC_CHUNK_TIMEOUT  = 1200;   // 等本块 REC_END 的上限（5000 → 1200 ms）
+const REC_CHUNK_RETRY    = 3;      // 每块最多试几次
+const REC_CHUNK_GAP      = 40;     // 块与块之间的呼吸时间（ms）
+let   adaptiveChunk      = REC_CHUNK;   // 当前块大小（每次回传开始时复位）
+
+function readEventsChunk(off, n) {
+  return new Promise(resolve => {
+    chunkBuf    = [];
+    chunkWanted = n;
+    chunkPhase  = 1;
+    let settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      chunkDone  = null;
+      chunkPhase = 0;
+      const got = chunkBuf || [];
+      chunkBuf  = null;
+      resolve({ ok, got });
+    };
+    const timer = setTimeout(() => finish(false), REC_CHUNK_TIMEOUT);
+    chunkDone = finish;
+    writeFrame(buildFrame(CMD.REC_READ, nextSeq(), [...u16le(off), ...u16le(n)]))
+      .catch(() => finish(false));
+  });
+}
+
+$('btnRecStop').onclick = async () => {
+  if (!recording) return;
+  recording = false;
+  $('btnRecStop').disabled = true;
+  $('recState').textContent = '停止录制…';
+  recEvents = [];
+  adaptiveChunk = REC_CHUNK;
+  chunkBuf = null; chunkPhase = 0; chunkDone = null;
+
+  // REC_STOP 的回包 arg = 录到的事件数
+  const total = await new Promise(async resolve => {
+    recStopResolve = resolve;
+    await writeFrame(buildFrame(CMD.REC_STOP, nextSeq(), []));
+    setTimeout(() => { if (recStopResolve) { recStopResolve = null; resolve(-1); } }, 2000);
+  });
+  const n = (typeof total === 'number' && total > 0) ? total : 0;
+  if (n === 0) {
+    $('recState').textContent = '没录到事件（先确认屏幕上 REC 计数在涨）';
+    $('btnRecStop').disabled = false;
+    return;
+  }
+  log('→ 录到 ' + n + ' 条事件，分块回传（每块最多 ' + REC_CHUNK + ' 条，丢块自动缩小并重发）');
+
+  let lost = 0, off = 0, okStreak = 0;
+  while (off < n) {
+    const cnt = Math.min(adaptiveChunk, n - off);
+    // ★★ 2026-11-01：**每次都多要一条**。
+    //   FPGA 侧 frame_tx 的队列（4 深）被 RECDATA 灌满后，紧跟着的 0x14 状态帧
+    //   会覆写 f3 ⇒ 本块**最后一条 RECDATA 丢失**（固件已回退，见 cmd_exec.v 注释）。
+    //   多要一条，丢掉的正好是那条多余的；真到末尾多读出来的是 RAM 里的旧数据，
+    //   也只取前 cnt 条，不影响。
+    const ask = cnt + 1;
+    let got = [], ok = false;
+    for (let k = 0; k < REC_CHUNK_RETRY; k++) {
+      const r = await readEventsChunk(off, ask);
+      got = r.got.slice(0, cnt);          // 只认前 cnt 条
+      if (got.length === cnt) { ok = true; break; }
+      const why = r.ok
+        ? ('只收到 ' + got.length + '/' + cnt + ' 条')
+        : (got.length ? ('中断，只收到 ' + got.length + '/' + cnt + ' 条') : '没回包');
+      log('⚠️ 第 ' + off + ' 块第 ' + (k + 1) + ' 次' + why + '，重发', 'err');
+      await sleep(120);          // 让模块把上一块吐空再重发
+    }
+    if (ok) {
+      recEvents.push(...got);
+      off += cnt;
+      $('recState').textContent = '回传中… ' + Math.min(off, n) + '/' + n;
+      // 连续 4 块干净 ⇒ 试着把块放大回来（链路好了就跑快些）
+      if (++okStreak >= 4 && adaptiveChunk < REC_CHUNK) {
+        adaptiveChunk *= 2; okStreak = 0;
+        log('✔ 链路稳定，块大小升到 ' + adaptiveChunk + ' 条');
+      }
+    } else if (adaptiveChunk > 1) {
+      // ★ 整块重发都不完整 ⇒ **块内丢帧**，收到的那几条不能信（可能中间缺一条，
+      //   拼进去会让后面的时间轴整体错位）。宁可从同一位置用**更小的块**重来。
+      adaptiveChunk >>= 1; okStreak = 0;
+      log('⚠️ 第 ' + off + ' 块重发 ' + REC_CHUNK_RETRY + ' 次仍不完整 ⇒ 降到每块 ' + adaptiveChunk + ' 条重来', 'err');
+      continue;
+    } else {
+      // 已经小到 1 条还收不到：只能记缺、跳过
+      lost += cnt; off += cnt; okStreak = 0;
+      log('⚠️ 第 ' + (off - cnt) + ' 条彻底收不到，跳过', 'err');
+    }
+    await sleep(REC_CHUNK_GAP);
+  }
+
+  if (!recEvents.length) {
+    $('recState').textContent = '没收到数据（检查是否真的录到音）';
+    $('btnRecStop').disabled = false;
+    return;
+  }
+  if (lost) log('⚠️ 重试 ' + REC_CHUNK_RETRY + ' 次后仍缺 ' + lost + ' 条', 'err');
+  // 诊断用：把首尾几条事件原样打出来（音号 / 相对上一条的间隔 / 时长），
+  // 这样"条数够了但听起来缺音"时能直接看出是 delta 还是 dur 不对。
+  const fmt = e => e.note + '@+' + e.delta + '/' + e.dur;
+  log('事件前 3：' + recEvents.slice(0, 3).map(fmt).join('  ') +
+      '  … 后 3：' + recEvents.slice(-3).map(fmt).join('  '), 'dim');
+  const midi = buildMidi(recEvents);
+  download('rec_' + new Date().toISOString().replace(/[:.]/g, '-') + '.mid', midi);
+  $('recState').textContent = '已存 ' + recEvents.length + ' / ' + n + ' 条为 MIDI' + (lost ? '（缺 ' + lost + '）' : '');
+  $('btnRecStop').disabled = false;
+};
+
+//==============================================================
+// 启动
+//==============================================================
+buildKeymapGrid();
+if (!navigator.bluetooth) {
+  log('本浏览器不支持 Web Bluetooth。安卓 Chrome 需要 https 或加入 chrome://flags 的白名单。', 'err');
+}
+</script>

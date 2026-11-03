@@ -1,0 +1,75 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-1  系统整体框图
+flowchart LR
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    subgraph IN["输入"]
+        direction TB
+        K1["12 键"]
+        K2["5 编码器"]
+        K3["KEY0–2"]
+        K4["BLE 模块"]
+    end
+
+    subgraph CTL["控制 50 MHz"]
+        direction TB
+        C1["消抖 · 档位"]
+        C2["音色 · 八度 · 音量"]
+        C3["曲谱 · 录音"]
+        C4["歌曲指引"]
+    end
+
+    subgraph AUD["音频 48.828 kHz"]
+        direction TB
+        V1["声部分配"]
+        V2["12 声部<br/>音高 + ADSR"]
+        V3["32 谐波<br/>加法合成"]
+        V4["混音 ÷16"]
+    end
+
+    subgraph FX["效果与输出"]
+        direction TB
+        F1["延迟 · 混响 · 合唱"]
+        F2["音量 · 震音 · 钳位"]
+        F3["I2S 16 bit"]
+    end
+
+    subgraph PXD["像素 75 MHz"]
+        direction TB
+        D1["显示抽头"]
+        D2["2048 点 FFT"]
+        D3["图层合成"]
+        D4["TMDS 编码"]
+    end
+
+    OUT1["3.5 mm 耳机"]
+    OUT2["HDMI 1280×720"]
+    PH["手机网页"]
+
+    K1 --> C1
+    K2 --> C1
+    K3 --> C1
+    K3 --> C4
+    K4 --> C3
+    PH <--> C3
+    C1 --> V1
+    C2 --> V2
+    C3 --> V1
+    V1 --> V2 --> V3 --> V4
+    V4 --> F1 --> F2 --> F3 --> OUT1
+    V4 --> D1
+    V4 --> D2
+    D1 --> D3
+    D2 --> D3
+    D3 --> D4 --> OUT2
+
+    class K1,K2,K3,K4,C1,C2,C3,C4 n
+    class V1,V2,V3,V4 k
+    class F1,F2,F3,D1,D2,D3,D4,OUT1,OUT2,PH n
+
+    style IN fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style CTL fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style AUD fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style FX fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style PXD fill:#ffffff,stroke:#9a9a9a,color:#333333

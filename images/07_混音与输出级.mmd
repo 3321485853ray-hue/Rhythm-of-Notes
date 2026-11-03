@@ -1,0 +1,54 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-12  混音与输出级
+%% 跨子图的边一律“框对框”，否则渲染器会忽略 direction LR
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["12 路声部"]
+
+    subgraph G1["① 混音"]
+        direction LR
+        M1["加法树"] --> M2["÷16"] --> M3["限幅"]
+    end
+
+    subgraph G2["② 效果器"]
+        direction LR
+        F1["延迟 / 混响 / 合唱"] --> F2["三开 ×0.75"]
+    end
+
+    subgraph OUT[" "]
+        direction LR
+
+        subgraph G3["③ 音量与输出"]
+            direction LR
+            V1["音量 · 震音"] --> V2["直流跟踪"] --> V3["加直流 · 钳位"]
+        end
+
+        subgraph G4["④ I2S"]
+            direction LR
+            T1["16 bit 右对齐"] --> T2["BCK / LRCK / PA_EN"]
+        end
+
+        O1["DAC → 功放 → 耳机"]
+
+        G3 --> G4 --> O1
+    end
+
+    style OUT fill:none,stroke:none
+
+    O2["48.8 kHz 采样节拍"]
+
+    I1 --> G1
+    G1 --> G2
+    G2 --> OUT
+    OUT --> O2
+
+    class I1 n
+    class M1,M2,M3,F1,F2,V1,V2,V3,T1,T2 n
+    class O1,O2 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G4 fill:#ffffff,stroke:#9a9a9a,color:#333333

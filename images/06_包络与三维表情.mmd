@@ -1,0 +1,51 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-6  ADSR 包络与三维表情
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["门控 / 触发"]
+    I2["音色"]
+    I3["表情维度 / 档位"]
+
+    subgraph G1["ADSR"]
+        direction TB
+        S0["空闲"]
+        S1["起音"]
+        S2["衰减"]
+        S3["持续"]
+        S4["释放"]
+        S0 -->|触发| S1 --> S2 --> S3
+        S3 -->|松手| S4
+        S1 -->|松手| S4
+        S2 -->|松手| S4
+        S4 --> S0
+    end
+
+    P1["音色预设<br/>9 个参数"]
+    O1["包络 Q15"]
+
+    subgraph G2["三维表情"]
+        direction TB
+        G21["滑音<br/>指数逼近"]
+        G22["颤音<br/>5.96 Hz"]
+        G23["震音<br/>11.92 Hz"]
+    end
+
+    O2["相位步进"]
+    O3["音量因子"]
+
+    I2 --> P1 --> G1
+    I1 --> G1
+    G1 --> O1
+    I3 --> G2
+    G21 --> O2
+    G22 --> O2
+    G23 --> O3
+
+    class I1,I2,I3 n
+    class S0,S1,S2,S3,S4,P1,G21,G22,G23 n
+    class O1,O2,O3 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333

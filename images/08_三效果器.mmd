@@ -1,0 +1,54 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-8  三效果器
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["混音输出"]
+    I2["开关 / 档位"]
+
+    subgraph G1["延迟"]
+        direction TB
+        D1["延迟线"]
+        D2["80 / 160 / 240 / 320 ms"]
+        D3["湿声叠加"]
+        D1 --> D2 --> D3
+    end
+
+    subgraph G2["混响"]
+        direction TB
+        R1["8 路梳状"]
+        R2["a = 1 − g<br/>无乘法"]
+        R3["延迟调制 ±8 点"]
+        R4["3 级全通扩散"]
+        R5["湿声 ×4"]
+        R1 --> R2 --> R3 --> R4 --> R5
+    end
+
+    subgraph G3["合唱"]
+        direction TB
+        C1["基准 12 ms"]
+        C2["LFO 0.745 Hz"]
+        C3["干 + 湿"]
+        C1 --> C2 --> C3
+    end
+
+    O1["→ 音量级"]
+
+    I1 --> G1
+    I1 --> G2
+    I1 --> G3
+    I2 --> G1
+    I2 --> G2
+    I2 --> G3
+    D3 --> O1
+    R5 --> O1
+    C3 --> O1
+
+    class I1,I2 n
+    class D1,D2,D3,R1,R2,R3,R4,R5,C1,C2,C3 n
+    class O1 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333

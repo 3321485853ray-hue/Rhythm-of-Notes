@@ -1,0 +1,30 @@
+# Gowin 构建产物
+impl/
+*.fs
+*.bin
+*.sbit
+*.wlf
+*.vcd
+*.vstf
+wlft*
+transcript
+work/
+work_*/
+_opt/
+
+# 仿真临时文件
+*.log
+modelsim.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# 本机文件
+_docx_backups/
+_package/
+.DS_Store
+Thumbs.db
+desktop.ini

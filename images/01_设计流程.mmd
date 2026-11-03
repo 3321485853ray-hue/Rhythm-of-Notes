@@ -1,0 +1,40 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 1-1  设计流程
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    subgraph S1["① 需求"]
+        direction TB
+        R1["基础：演奏 · 音色 · 音量"]
+        R2["拓展：复音 · 表情 · 效果 · 显示"]
+        R1 ~~~ R2
+    end
+
+    subgraph S2["② 架构"]
+        direction TB
+        A1["纯 RTL，无 CPU"]
+        A2["加法合成 8 × 32"]
+        A3["HDMI 直驱"]
+        A1 ~~~ A2 ~~~ A3
+    end
+
+    subgraph S3["③ 分阶段实现"]
+        direction TB
+        P1["0–2 音频链"] --> P2["3 包络"] --> P3["4–6 音色"] --> P4["9 加法合成"]
+        P4 --> P5["7 表情"] --> P6["8 效果器"] --> P7["10 教学"]
+        P7 --> P8["11 蓝牙"] --> P9["12 显示链"]
+    end
+
+    L["每阶段闭环：仿真 → 布线 → 上板"]
+    V["迭代 v1 → v48"]
+
+    S1 --> S2 --> S3 --> L --> V
+    V -. 发现问题 .-> S3
+
+    class R1,R2,A1,A2,A3,P1,P2,P3,P4,P5,P6,P7,P8,P9 n
+    class L,V k
+
+    style S1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style S2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style S3 fill:#ffffff,stroke:#9a9a9a,color:#333333

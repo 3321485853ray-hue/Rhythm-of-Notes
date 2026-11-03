@@ -1,0 +1,54 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-12  歌曲指引
+flowchart TB
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["KEY1 / KEY2"]
+    I2["12 键状态"]
+    I3["BPM"]
+
+    subgraph G1["模式"]
+        direction TB
+        S0["关闭"]
+        S1["菜单"]
+        S2["新手"]
+        S3["进阶"]
+        S0 -->|KEY1| S1
+        S1 -->|确认| S2
+        S1 -->|确认| S3
+        S2 -->|长按| S0
+        S3 -->|长按| S0
+    end
+
+    R1["曲谱 ROM<br/>2 × 64 步"]
+
+    subgraph G3["提示"]
+        direction TB
+        D1["8 LED 提示"]
+        D2["下落方块"]
+        D3["命中判定"]
+        D4["面板文字"]
+        D1 --> D3
+        D2 --> D3
+        D3 --> D4
+    end
+
+    O1["LED"]
+    O2["屏幕"]
+
+    I1 --> G1
+    I3 --> G1
+    R1 --> G1
+    G1 --> G3
+    I2 --> D3
+    D1 --> O1
+    D2 --> O2
+
+    class I1,I2,I3 n
+    class S0,S1,S2,S3,D1,D2,D3,D4 n
+    class R1 k
+    class O1,O2 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333

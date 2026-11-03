@@ -1,0 +1,47 @@
+%%{init: {"theme":"base","themeVariables":{"fontSize":"22px","fontFamily":"Microsoft YaHei, sans-serif","primaryColor":"#ffffff","primaryTextColor":"#111111","primaryBorderColor":"#555555","lineColor":"#666666"}}}%%
+%% 图 2-10  实时频谱
+flowchart LR
+    classDef n fill:#ffffff,stroke:#5a5a5a,color:#111111,stroke-width:1.2px
+    classDef k fill:#ececec,stroke:#333333,color:#000000,stroke-width:1.6px
+
+    I1["16 bit 采样"]
+    I2["4096 点缓冲"]
+
+    subgraph G1["加窗"]
+        W1["Hann 窗"]
+    end
+
+    subgraph G2["FFT"]
+        B1["位反转"]
+        B2["1024 蝶形 × 11 级"]
+        B3["旋转因子"]
+        B1 --> B2
+        B3 --> B2
+    end
+
+    subgraph G3["映射"]
+        M1["幅度近似"]
+        M2["2048 → 128 柱"]
+        M3["柱高限幅"]
+        M1 --> M2 --> M3
+    end
+
+    subgraph G4["跨域"]
+        S1["双 bank BSRAM"]
+        S2["平滑三相"]
+        S1 --> S2
+    end
+
+    O1["128 柱"]
+    R1["23.84 Hz / bin"]
+
+    I1 --> I2 --> G1 --> G2 --> G3 --> G4 --> O1
+    G2 -.-> R1
+
+    class I1,I2,W1,B1,B2,B3,M1,M2,M3,S1,S2 n
+    class O1,R1 k
+
+    style G1 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G2 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G3 fill:#ffffff,stroke:#9a9a9a,color:#333333
+    style G4 fill:#ffffff,stroke:#9a9a9a,color:#333333
